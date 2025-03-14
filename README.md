@@ -26,14 +26,17 @@ This project is a **To-Do List app** built with **React (Vite), Firebase Authent
 ```sh
 git clone https://github.com/your-username/your-repo.git
 cd your-repo
+```
 
 ### 2️⃣ Install Dependencies
 ```sh
 npm install
+```
 
 ### 3️⃣ Run the App
+```sh
 npm run dev
-
+```
 ---
 
 ##📂 Project Structure
