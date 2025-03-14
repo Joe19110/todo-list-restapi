@@ -51,7 +51,7 @@ npm run dev
  ┃ ┃ ┗ 📄 TodoList.jsx
  ┃ ┣ 📄 firebase.js    # Firebase setup
  ┃ ┗ 📄 App.jsx        # Main component
- ┣ 📄 .env             # Environment variables (not committed)
+ ┣ 📄 .env             # Environment variables
  ┣ 📄 README.md        # This file
  ┣ 📄 package.json
  ┗ 📄 vite.config.js
