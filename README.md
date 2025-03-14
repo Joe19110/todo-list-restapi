@@ -39,7 +39,8 @@ npm run dev
 ```
 ---
 
-##📂 Project Structure
+## 📂 Project Structure
+```sh
 📦 WADS-TodoList
  ┣ 📂 src
  ┃ ┣ 📂 assets         # Images (Google & GitHub icons)
@@ -54,6 +55,7 @@ npm run dev
  ┣ 📄 README.md        # This file
  ┣ 📄 package.json
  ┗ 📄 vite.config.js
+```
 
 ---
 
