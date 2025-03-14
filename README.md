@@ -24,8 +24,8 @@ This project is a **To-Do List app** built with **React (Vite), Firebase Authent
 
 ### 1️⃣ Clone the Repository
 ```sh
-git clone https://github.com/your-username/your-repo.git
-cd your-repo
+git clone https://github.com/Joe19110/WADS-TodoList.git
+cd WADS-TodoList
 ```
 
 ### 2️⃣ Install Dependencies
@@ -40,7 +40,7 @@ npm run dev
 ---
 
 ##📂 Project Structure
-📦 repo
+📦 WADS-TodoList
  ┣ 📂 src
  ┃ ┣ 📂 assets         # Images (Google & GitHub icons)
  ┃ ┣ 📂 components     # UI components
