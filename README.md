@@ -37,6 +37,12 @@ npm install
 ```sh
 npm run dev
 ```
+
+### 🚀 Run using Docker Image
+```sh
+docker run -p 5173:5173 joelliane/wads-todolist:latest
+```
+
 ---
 
 ## 📂 Project Structure
