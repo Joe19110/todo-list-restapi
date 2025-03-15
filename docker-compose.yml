@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - VITE_FIREBASE_API_KEY=AIzaSyCzqSuw0HeIc6Ufqjwvzs492S0Z9S3SiPM
+      - VITE_FIREBASE_AUTH_DOMAIN=wads-todolist.firebaseapp.com
+      - VITE_FIREBASE_PROJECT_ID=wads-todolist
+      - VITE_FIREBASE_STORAGE_BUCKET=wads-todolist.firebasestorage.app
+      - VITE_FIREBASE_MESSAGING_SENDER_ID=40402209430
+      - VITE_FIREBASE_APP_ID=1:40402209430:web:e9a2ea596a8d2e1f0090b7
+      - VITE_CLOUDINARY_CLOUD_NAME=dpcju4avd
+      - VITE_CLOUDINARY_UPLOAD_PRESET=ml_default
+    stdin_open: true
+    tty: true
+
