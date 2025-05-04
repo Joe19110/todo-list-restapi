@@ -1,4 +1,4 @@
-# 🔥 React To-Do List with Firebase Authentication & Cloudinary
+# 🔥 Rect To-Do List with Firebase Authentication & Cloudinary
 
 This project is a **To-Do List app** built with **React (Vite), Firebase Authentication, Firestore, and Cloudinary** for profile pictures. It supports authentication via **email/password, and Google** with automatic provider linking.
 
