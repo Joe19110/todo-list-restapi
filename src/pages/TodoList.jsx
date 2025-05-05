@@ -1,3 +1,4 @@
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { useState, useEffect } from "react";
 import {
   Container,
@@ -18,79 +19,84 @@ import {
 } from "@mui/material";
 import { Delete, Edit } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
-import { db, auth } from "../firebase";
-import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, getDoc } from "firebase/firestore";
 
 export default function TodoList() {
-  const [user, setUser] = useState(null); // Track user state
+  const [userId, setUserId] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [task, setTask] = useState("");
   const [editingIndex, setEditingIndex] = useState(null);
-  const [profilePic, setProfilePic] = useState(""); // Default profile picture
+  const [profilePic, setProfilePic] = useState("");
   const navigate = useNavigate();
 
-  // Watch for auth state changes
   useEffect(() => {
-    const unsubscribeAuth = auth.onAuthStateChanged((authUser) => {
-      setUser(authUser);
-    });
-
-    return () => unsubscribeAuth();
-  }, []);
-
-  // Fetch user profile picture when user is available
-  useEffect(() => {
-    if (!user) return;
-
-    const userDocRef = doc(db, "users", user.uid);
-
-    const fetchProfilePic = async () => {
-      const docSnap = await getDoc(userDocRef);
-      if (docSnap.exists()) {
-        const profileUrl = docSnap.data().profilePicture || "";
-        setProfilePic(`${profileUrl}?t=${new Date().getTime()}`); // Force refresh
-      }
-    };
-
-    fetchProfilePic();
-
-    // Real-time listener for profile pic updates
-    const unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const profileUrl = docSnap.data().profilePicture || "";
-        setProfilePic(`${profileUrl}?t=${new Date().getTime()}`);
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUserId(user.uid);
+        // Create or update user in MySQL when they log in
+        fetch("http://localhost:5000/api/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            firebase_uid: user.uid,
+            profile_picture: user.photoURL || ""
+          }),
+        });
+      } else {
+        navigate("/login");
       }
     });
+  
+    return () => unsubscribe();
+  }, [navigate]);
 
-    return () => unsubscribeProfile();
-  }, [user]);
-
-  // Fetch tasks when user is available
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
 
-    const q = query(collection(db, "tasks"), where("userId", "==", user.uid));
-    const unsubscribeTasks = onSnapshot(q, (snapshot) => {
-      setTasks(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
+    // Fetch user data (including profile picture)
+    fetch(`http://localhost:5000/api/users/${userId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.profile_picture) {
+          setProfilePic(data.profile_picture);
+        }
+      })
+      .catch(console.error);
 
-    return () => unsubscribeTasks();
-  }, [user]);
+    // Fetch tasks
+    fetch(`http://localhost:5000/api/tasks?userId=${userId}`)
+      .then((res) => res.json())
+      .then(setTasks)
+      .catch(console.error);
+  }, [userId]);
 
   const handleAddTask = async () => {
-    if (task.trim() === "" || !user) return;
+    if (task.trim() === "") return;
 
-    await addDoc(collection(db, "tasks"), {
-      text: task,
-      completed: false,
-      userId: user.uid,
-    });
+    try {
+      const res = await fetch("http://localhost:5000/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: task, userId }),
+      });
 
-    setTask("");
+      const newTask = await res.json();
+      setTasks([newTask, ...tasks]);
+      setTask("");
+    } catch (error) {
+      console.error("Failed to add task:", error);
+    }
   };
 
   const handleDeleteTask = async (id) => {
-    await deleteDoc(doc(db, "tasks", id));
+    try {
+      await fetch(`http://localhost:5000/api/tasks/${id}`, { 
+        method: "DELETE" 
+      });
+      setTasks(tasks.filter((t) => t.id !== id));
+    } catch (error) {
+      console.error("Failed to delete task:", error);
+    }
   };
 
   const handleEditTask = (id) => {
@@ -98,12 +104,38 @@ export default function TodoList() {
   };
 
   const handleUpdateTask = async (id, newText) => {
-    await updateDoc(doc(db, "tasks", id), { text: newText });
-    setEditingIndex(null);
+    try {
+      const res = await fetch(`http://localhost:5000/api/tasks/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: newText }),
+      });
+
+      const updatedTask = await res.json();
+      setTasks(
+        tasks.map((t) => (t.id === id ? updatedTask : t))
+      );
+      setEditingIndex(null);
+    } catch (error) {
+      console.error("Failed to update task:", error);
+    }
   };
 
   const handleToggleComplete = async (id, completed) => {
-    await updateDoc(doc(db, "tasks", id), { completed: !completed });
+    try {
+      const res = await fetch(`http://localhost:5000/api/tasks/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completed: !completed }),
+      });
+
+      const updatedTask = await res.json();
+      setTasks(
+        tasks.map((t) => (t.id === id ? updatedTask : t))
+      );
+    } catch (error) {
+      console.error("Failed to toggle task completion:", error);
+    }
   };
 
   return (
@@ -125,6 +157,11 @@ export default function TodoList() {
             fullWidth
             value={task}
             onChange={(e) => setTask(e.target.value)}
+            onKeyPress={(e) => {
+              if (e.key === "Enter") {
+                handleAddTask();
+              }
+            }}
           />
           <Button variant="contained" color="primary" onClick={handleAddTask}>
             Add
@@ -135,7 +172,10 @@ export default function TodoList() {
           {tasks.map((t) => (
             <Card key={t.id} sx={{ mb: 2, p: 1 }}>
               <CardContent sx={{ display: "flex", alignItems: "center", flexWrap: "wrap" }}>
-                <Checkbox checked={t.completed} onChange={() => handleToggleComplete(t.id, t.completed)} />
+                <Checkbox 
+                  checked={t.completed} 
+                  onChange={() => handleToggleComplete(t.id, t.completed)}
+                />
                 <Box flex={1} minWidth={0} sx={{ display: "flex", alignItems: "center" }}>
                   {editingIndex === t.id ? (
                     <InputBase
@@ -152,7 +192,10 @@ export default function TodoList() {
                   ) : (
                     <ListItemText
                       primary={t.text}
-                      sx={{ textDecoration: t.completed ? "line-through" : "none", wordBreak: "break-word" }}
+                      sx={{ 
+                        textDecoration: t.completed ? "line-through" : "none",
+                        wordBreak: "break-word"
+                      }}
                     />
                   )}
                 </Box>

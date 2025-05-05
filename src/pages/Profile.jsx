@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { auth, db, googleProvider, githubProvider } from "../firebase";
-import { doc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { auth, googleProvider, githubProvider } from "../firebase";
 import {
   deleteUser,
   reauthenticateWithPopup,
@@ -22,6 +21,7 @@ import {
   IconButton,
   TextField,
   Alert,
+  CircularProgress,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useNavigate } from "react-router-dom";
@@ -33,22 +33,36 @@ export default function Profile() {
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const user = auth.currentUser;
 
   useEffect(() => {
-    if (user) {
-      const fetchUserData = async () => {
-        const userRef = doc(db, "users", user.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          setUserData(userSnap.data());
-          setEditedData(userSnap.data());
+    const fetchUserData = async () => {
+      if (!user) {
+        navigate("/login");
+        return;
+      }
+
+      try {
+        const response = await fetch(`http://localhost:5000/api/users/${user.uid}`);
+        if (response.ok) {
+          const data = await response.json();
+          setUserData(data);
+          setEditedData(data);
+        } else {
+          throw new Error('Failed to fetch user data');
         }
-      };
-      fetchUserData();
-    }
-  }, [user]);
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+        setError("Failed to load user data");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, [user, navigate]);
 
   const handleLogout = async () => {
     await auth.signOut();
@@ -67,11 +81,25 @@ export default function Profile() {
   const saveChanges = async () => {
     if (!user) return;
     try {
-      await updateDoc(doc(db, "users", user.uid), editedData);
-      setUserData(editedData);
+      const response = await fetch(`http://localhost:5000/api/users/${user.uid}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(editedData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update profile');
+      }
+
+      const updatedData = await response.json();
+      setUserData(updatedData);
       setIsEditing(false);
+      setError("");
     } catch (error) {
       console.error("Error updating profile:", error);
+      setError("Failed to update profile");
     }
   };
 
@@ -79,19 +107,55 @@ export default function Profile() {
     const file = event.target.files[0];
     if (!file) return;
 
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+      setError("Please upload an image file");
+      return;
+    }
+
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image size should be less than 5MB");
+      return;
+    }
+
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("upload_preset", "ml_default");
 
     try {
-      const res = await axios.post(`https://api.cloudinary.com/v1_1/dpcju4avd/image/upload`, formData);
-      const imageUrl = res.data.secure_url;
+      // First, upload to our backend which will handle Cloudinary upload
+      const uploadResponse = await fetch('http://localhost:5000/api/upload', {
+        method: 'POST',
+        body: formData
+      });
 
-      await updateDoc(doc(db, "users", user.uid), { profilePicture: imageUrl });
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        throw new Error(errorData.message || 'Failed to upload image');
+      }
 
-      setUserData((prev) => ({ ...prev, profilePicture: imageUrl }));
+      const { imageUrl } = await uploadResponse.json();
+
+      // Then update user profile with new image URL
+      const response = await fetch(`http://localhost:5000/api/users/${user.uid}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ profile_picture: imageUrl }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update profile picture');
+      }
+
+      const updatedData = await response.json();
+      setUserData(updatedData);
+      setEditedData(updatedData);
+      setError("");
     } catch (error) {
       console.error("Error uploading image:", error);
+      setError(error.message || "Failed to upload image");
     }
   };
 
@@ -111,15 +175,31 @@ export default function Profile() {
         await reauthenticateWithPopup(user, provider);
       }
 
-      await deleteDoc(doc(db, "users", user.uid));
-      await deleteUser(user);
+      // Delete from MySQL first
+      const response = await fetch(`http://localhost:5000/api/users/${user.uid}`, {
+        method: 'DELETE',
+      });
 
-      alert("Account deleted successfully.");
+      if (!response.ok) {
+        throw new Error('Failed to delete account from database');
+      }
+
+      // Then delete from Firebase
+      await deleteUser(user);
       navigate("/login");
     } catch (err) {
-      setError(err.message);
+      console.error("Error deleting account:", err);
+      setError(err.message || "Failed to delete account");
     }
   };
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Container maxWidth="xs">
@@ -135,7 +215,7 @@ export default function Profile() {
         <input type="file" id="profile-upload" style={{ display: "none" }} onChange={handleImageUpload} />
         <label htmlFor="profile-upload">
           <Avatar
-            src={userData?.profilePicture || ""}
+            src={userData?.profile_picture || ""}
             sx={{ width: 120, height: 120, margin: "auto", cursor: "pointer" }}
           />
         </label>
@@ -155,8 +235,10 @@ export default function Profile() {
                 fullWidth
                 label="Birthdate"
                 name="birthdate"
+                type="date"
                 value={editedData.birthdate || ""}
                 onChange={handleChange}
+                InputLabelProps={{ shrink: true }}
                 sx={{ mb: 2 }}
               />
               <TextField
@@ -177,10 +259,13 @@ export default function Profile() {
                 <strong>Name:</strong> {userData?.name}
               </Typography>
               <Typography variant="body1" sx={{ mb: 1 }}>
-                <strong>Birthdate:</strong> {userData?.birthdate}
+                <strong>Email:</strong> {userData?.email}
               </Typography>
               <Typography variant="body1" sx={{ mb: 1 }}>
-                <strong>Occupation:</strong> {userData?.occupation}
+                <strong>Birthdate:</strong> {userData?.birthdate || 'Not set'}
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 1 }}>
+                <strong>Occupation:</strong> {userData?.occupation || 'Not set'}
               </Typography>
             </>
           )}

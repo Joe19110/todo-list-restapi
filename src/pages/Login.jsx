@@ -1,17 +1,9 @@
 import { useState } from "react";
 import { auth, googleProvider } from "../firebase";
-import {
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  fetchSignInMethodsForEmail,
-  linkWithCredential,
-  EmailAuthProvider,
-} from "firebase/auth";
+import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { Container, TextField, Typography, Box, IconButton, Button } from "@mui/material";
 import GoogleIcon from "../assets/google.webp";
 import { useNavigate } from "react-router-dom";
-import { doc, getDoc, setDoc } from "firebase/firestore"; // Firestore imports
-import { db } from "../firebase"; // Import Firestore instance
 
 export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
@@ -24,49 +16,51 @@ export default function Login() {
 
   const handleLogin = async () => {
     try {
-      await signInWithEmailAndPassword(auth, form.email, form.password);
-      navigate("/todolist");
-    } catch (err) {
-      if (err.code === "auth/invalid-credential") {
-        const signInMethods = await fetchSignInMethodsForEmail(auth, form.email);
-
-        if (signInMethods.includes("google.com")) {
-          setError("This account is linked to Google. Try logging in with Google.");
-        } else {
-          setError("Incorrect email or password.");
-        }
+      const userCredential = await signInWithEmailAndPassword(auth, form.email, form.password);
+      const user = userCredential.user;
+      
+      // Check if user exists in MySQL
+      const checkResponse = await fetch(`http://localhost:5000/api/users/${user.uid}`);
+      
+      if (checkResponse.ok) {
+        navigate("/todolist");
       } else {
-        setError(err.message);
+        // If user doesn't exist, redirect to registration
+        navigate("/register", { 
+          state: { 
+            email: user.email,
+            name: user.displayName,
+            profilePicture: user.photoURL
+          }
+        });
       }
+    } catch (err) {
+      setError(err.message);
     }
   };
 
   const handleOAuthLogin = async (provider) => {
     try {
-        const result = await signInWithPopup(auth, provider);
-        const user = result.user;
-        const userRef = doc(db, "users", user.uid); // Use UID, not email
-        const userSnap = await getDoc(userRef);
-        const email = user.email;
-        const signInMethods = await fetchSignInMethodsForEmail(auth, email);
-        if (!userSnap.exists() || !userSnap.data().name) {
-        
-        navigate("/register", { state: { email, name: user.displayName || "", profilePicture: user.photoURL || "" } });
-      } else {
-       
-        if (!signInMethods.includes("password")) {
-          try {
-            const tempPassword = form.password || "TempPassword123!";
-            const credential = EmailAuthProvider.credential(email, tempPassword);
-            await linkWithCredential(user, credential);
-          } catch (err) {
-            if (err.code !== "auth/provider-already-linked") {
-              throw err;
-            }
-          }
-        }
-        
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      
+      // Check if user exists in MySQL
+      const checkResponse = await fetch(`http://localhost:5000/api/users/${user.uid}`);
+      
+      if (checkResponse.ok) {
+        // Existing user, proceed to todo list
         navigate("/todolist");
+      } else {
+        // New user, redirect to registration to complete profile
+        navigate("/register", { 
+          state: { 
+            email: user.email,
+            name: user.displayName,
+            profilePicture: user.photoURL,
+            isOAuth: true,
+            firebase_uid: user.uid
+          }
+        });
       }
     } catch (err) {
       setError(err.message);
@@ -99,7 +93,11 @@ export default function Login() {
           <Typography variant="body2">
             Don't have an account?{" "}
             <span
-              style={{ color: "blue", cursor: "pointer", textDecoration: "underline" }}
+              style={{
+                color: "blue",
+                cursor: "pointer",
+                textDecoration: "underline",
+              }}
               onClick={() => navigate("/register")}
             >
               Register

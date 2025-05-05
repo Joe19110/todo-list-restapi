@@ -1,204 +1,190 @@
 import { useState, useEffect } from "react";
-import { auth, db, googleProvider } from "../firebase";
-import {
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  updateProfile,
+import { auth } from "../firebase";
+import { 
+  createUserWithEmailAndPassword, 
   linkWithCredential,
-  EmailAuthProvider,
+  EmailAuthProvider 
 } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
 import {
   Container,
   TextField,
   Button,
-  Typography,
   Box,
-  IconButton,
+  AppBar,
+  Toolbar,
+  Typography,
+  Avatar,
+  Alert,
 } from "@mui/material";
-import GoogleIcon from "../assets/google.webp";
 import { useNavigate, useLocation } from "react-router-dom";
 
 export default function Register() {
-  const [form, setForm] = useState({
-    email: "",
-    password: "",
-    name: "",
-    birthdate: "",
-    occupation: "",
-  });
+  const [name, setName] = useState(""); 
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [birthdate, setBirthdate] = useState("");
+  const [occupation, setOccupation] = useState("");
+  const [profilePic, setProfilePic] = useState(""); 
   const [error, setError] = useState("");
-  const [isGoogleSignUp, setIsGoogleSignUp] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const isOAuthUser = location.state?.isOAuth;
 
   useEffect(() => {
     if (location.state?.email) {
-      setForm((prev) => ({
-        ...prev,
-        email: location.state.email,
-        name: location.state.name || "",
-      }));
-      setIsGoogleSignUp(!!location.state.profilePicture);
+      setEmail(location.state.email);
+      setName(location.state.name || "");
+      setProfilePic(location.state.profilePicture || "");
     }
   }, [location.state]);
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
-
   const handleRegister = async () => {
-    if (!form.name || !form.email || (!isGoogleSignUp && !form.password)) {
+    if (!name || !email || !password) {
       setError("Name, Email, and Password are required.");
       return;
     }
 
-    if (!isGoogleSignUp && form.password.length < 6) {
+    if (password.length < 6) {
       setError("Password must be at least 6 characters.");
       return;
     }
 
     try {
-      let user;
-      if (isGoogleSignUp) {
-        user = auth.currentUser;
-        const credential = EmailAuthProvider.credential(form.email, form.password);
-        await linkWithCredential(user, credential);
+      let firebase_uid;
+
+      if (isOAuthUser) {
+        // For OAuth users, link email/password to their account
+        const credential = EmailAuthProvider.credential(email, password);
+        await linkWithCredential(auth.currentUser, credential);
+        firebase_uid = auth.currentUser.uid;
       } else {
-        const userCredential = await createUserWithEmailAndPassword(auth, form.email, form.password);
-        user = userCredential.user;
+        // For new users, create account with email/password
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        firebase_uid = userCredential.user.uid;
       }
-      
-      await updateProfile(user, { displayName: form.name });
-      await setDoc(doc(db, "users", user.uid), {
-        name: form.name,
-        birthdate: form.birthdate,
-        occupation: form.occupation,
-        email: form.email,
-        profilePicture: isGoogleSignUp ? user.photoURL || "" : "",
-      });
 
-      navigate("/todolist");
-    } catch (err) {
-      setError(err.message);
-    }
-  };
+      // Store additional user data in MySQL
+      const userData = {
+        name,
+        email,
+        firebase_uid,
+        birthdate,
+        occupation,
+        profile_picture: profilePic,
+      };
 
-  const handleOAuthSignUp = async () => {
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      navigate("/register", {
-        state: {
-          email: user.email,
-          name: user.displayName || "",
-          profilePicture: user.photoURL || "",
+      const response = await fetch("http://localhost:5000/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify(userData),
       });
+
+      const data = await response.json();
+      if (response.ok) {
+        navigate("/todolist");
+      } else {
+        if (!isOAuthUser) {
+          // If MySQL registration fails for new users, delete the Firebase user
+          await auth.currentUser.delete();
+        }
+        setError(data.message || "Registration failed");
+      }
     } catch (err) {
-      setError(err.message);
+      console.error("Registration error:", err);
+      if (err.code === 'auth/email-already-in-use') {
+        setError("This email is already registered. Please use a different email or try logging in.");
+      } else {
+        setError(err.message || "An error occurred while registering.");
+      }
     }
   };
 
   return (
-    <Container maxWidth="xs">
-      <Box textAlign="center" mt={10}>
-        <Typography variant="h4" gutterBottom>
-          Register
-        </Typography>
+    <>
+      <AppBar position="static">
+        <Toolbar sx={{ display: "flex", justifyContent: "space-between", px: 2 }}>
+          <Typography variant="h6">Register</Typography>
+          <Avatar alt="Profile" src={profilePic} />
+        </Toolbar>
+      </AppBar>
 
-        <TextField
-          label="Name"
-          name="name"
-          fullWidth
-          onChange={handleChange}
-          margin="dense"
-          value={form.name}
-          required
-        />
-        <TextField
-          label="Birthdate"
-          name="birthdate"
-          fullWidth
-          onChange={handleChange}
-          margin="dense"
-        />
-        <TextField
-          label="Occupation"
-          name="occupation"
-          fullWidth
-          onChange={handleChange}
-          margin="dense"
-        />
-        <TextField
-          label="Email"
-          name="email"
-          fullWidth
-          onChange={handleChange}
-          margin="dense"
-          value={form.email}
-          disabled={isGoogleSignUp}
-          required
-        />
-        {!isGoogleSignUp && (
+      <Container maxWidth="sm" sx={{ mt: 6, px: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {isOAuthUser && (
+            <Alert severity="info">
+              Please set a password to enable email/password login for your account
+            </Alert>
+          )}
+
+          <TextField
+            label="Name"
+            variant="outlined"
+            fullWidth
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <TextField
+            label="Email"
+            variant="outlined"
+            fullWidth
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={isOAuthUser} // Disable email field for OAuth users
+          />
           <TextField
             label="Password"
-            name="password"
-            type="password"
+            variant="outlined"
             fullWidth
-            onChange={handleChange}
-            margin="dense"
-            required
-            error={form.password.length > 0 && form.password.length < 6}
-            helperText={form.password.length > 0 && form.password.length < 6 ? "Password must be at least 6 characters." : ""}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
           />
-        )}
-        {isGoogleSignUp && (
           <TextField
-            label="Set Password"
-            name="password"
-            type="password"
+            label="Birthdate"
+            variant="outlined"
             fullWidth
-            onChange={handleChange}
-            margin="dense"
-            required
-            error={form.password.length > 0 && form.password.length < 6}
-            helperText={form.password.length > 0 && form.password.length < 6 ? "Password must be at least 6 characters." : ""}
+            value={birthdate}
+            onChange={(e) => setBirthdate(e.target.value)}
+            type="date"
+            InputLabelProps={{ shrink: true }}
           />
-        )}
+          <TextField
+            label="Occupation"
+            variant="outlined"
+            fullWidth
+            value={occupation}
+            onChange={(e) => setOccupation(e.target.value)}
+          />
+          
+          {error && (
+            <Typography color="error" sx={{ mt: 1 }}>
+              {error}
+            </Typography>
+          )}
 
-        <Button
-          variant="contained"
-          fullWidth
-          onClick={handleRegister}
-          sx={{ mt: 2 }}
-          disabled={!form.name || !form.email || (!isGoogleSignUp && form.password.length < 6)}
-        >
-          Register
-        </Button>
+          <Button
+            variant="contained"
+            fullWidth
+            color="primary"
+            onClick={handleRegister}
+            sx={{ mt: 2 }}
+          >
+            {isOAuthUser ? "Complete Registration" : "Register"}
+          </Button>
 
-        {!isGoogleSignUp && (
-          <Box display="flex" justifyContent="center" mt={2} gap={2}>
-            <IconButton onClick={handleOAuthSignUp}>
-              <img src={GoogleIcon} alt="Google Sign Up" width={40} height={40} />
-            </IconButton>
-          </Box>
-        )}
-
-        <Box mt={2}>
-          <Typography variant="body2">
-            Already have an account?{" "}
-            <span
-              style={{ color: "blue", cursor: "pointer", textDecoration: "underline" }}
+          {!isOAuthUser && (
+            <Button
+              variant="text"
+              fullWidth
               onClick={() => navigate("/login")}
             >
-              Login
-            </span>
-          </Typography>
+              Already have an account? Login
+            </Button>
+          )}
         </Box>
-
-        {error && <Typography color="error">{error}</Typography>}
-      </Box>
-    </Container>
+      </Container>
+    </>
   );
 }
