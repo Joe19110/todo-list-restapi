@@ -53,7 +53,26 @@ This project is a **Todo List application** built with **React (Vite), Firebase 
 - Cloudinary account
 - Firebase project
 
-### 1️⃣ Environment Setup
+### 1️⃣ MySQL Setup
+```bash
+# 1. Install MySQL Server 8.0
+# Windows: Download and install from https://dev.mysql.com/downloads/installer/
+# Mac: brew install mysql
+# Linux: sudo apt install mysql-server
+
+# 2. Start MySQL Service
+# Windows: Net start MySQL80
+# Mac/Linux: sudo service mysql start
+
+# 3. Access MySQL and create database
+mysql -u root -p
+# Enter your password when prompted
+
+# 4. Create the database
+CREATE DATABASE todo_app;
+```
+
+### 2️⃣ Environment Setup
 Create `.env` files in both root and server directories:
 
 ```env
@@ -69,9 +88,30 @@ VITE_FIREBASE_APP_ID=your_app_id
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
+
+# Database Configuration (in server/.env)
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_mysql_password
+DB_NAME=todo_app
 ```
 
-### 2️⃣ Installation
+### 3️⃣ Update Database Configuration
+Edit `server/config.js`:
+```javascript
+module.exports = {
+  development: {
+    username: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || 'your_password',
+    database: process.env.DB_NAME || 'todo_app',
+    host: process.env.DB_HOST || 'localhost',
+    dialect: 'mysql'
+  }
+  // ... other configurations
+};
+```
+
+### 4️⃣ Installation
 
 ```bash
 # Install frontend dependencies
@@ -82,13 +122,13 @@ cd server
 npm install
 ```
 
-### 3️⃣ Database Setup
+### 5️⃣ Database Initialization
 ```bash
 # In server directory
 node init-db.js
 ```
 
-### 4️⃣ Start the Application
+### 6️⃣ Start the Application
 ```bash
 # Start backend server (from server directory)
 npm start
@@ -104,82 +144,46 @@ The application will be available at:
 
 ---
 
+## 📤 Database Export/Import
+
+### Export Database
+```bash
+# Export the database structure and data
+mysqldump -u root -p todo_app > todo_app_backup.sql
+
+# Export only the structure
+mysqldump -u root -p --no-data todo_app > todo_app_structure.sql
+
+# Export only the data
+mysqldump -u root -p --no-create-info todo_app > todo_app_data.sql
+```
+
+### Import Database
+```bash
+# Create the database if it doesn't exist
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS todo_app"
+
+# Import the database
+mysql -u root -p todo_app < todo_app_backup.sql
+```
+
+### Common Issues
+1. **MySQL Connection Error**
+   - Check if MySQL service is running
+   - Verify credentials in .env file
+   - Ensure MySQL is running on default port (3306)
+
+2. **Database Creation Error**
+   - Make sure you have sufficient privileges
+   - Check if database name already exists
+   - Verify MySQL user permissions
+
+3. **Table Creation Error**
+   - Run `node init-db.js` to initialize tables
+   - Check for any existing conflicting tables
+   - Verify Sequelize model definitions
+
+---
+
 ## 📂 Project Structure
 ```
-📦 WADS-TodoList
- ┣ 📂 src                 # Frontend source code
- ┃ ┣ 📂 components        # Reusable React components
- ┃ ┣ 📂 pages            # Page components
- ┃ ┣ 📂 assets           # Static assets
- ┃ ┣ 📄 App.jsx          # Main application component
- ┃ ┗ 📄 firebase.js      # Firebase configuration
- ┣ 📂 server             # Backend source code
- ┃ ┣ 📂 models           # Sequelize models
- ┃ ┣ 📂 routes           # Express routes
- ┃ ┣ 📄 swagger.js       # API documentation
- ┃ ┣ 📄 server.js        # Express server setup
- ┃ ┗ 📄 init-db.js       # Database initialization
- ┣ 📄 .env               # Environment variables
- ┗ 📄 package.json       # Project dependencies
-```
-
----
-
-## 🔐 Authentication Flow
-1. **New Users:**
-   - Register with email/password
-   - Sign in with Google
-   - Profile details stored in MySQL
-   - Optional profile picture upload
-
-2. **Existing Users:**
-   - Direct login with credentials
-   - OAuth provider linking if email exists
-   - Automatic profile merging
-
-3. **Profile Management:**
-   - Update profile information
-   - Change/delete profile picture
-   - View login providers
-
----
-
-## 📚 API Documentation
-
-### Authentication Endpoints
-```http
-POST /api/auth/register  # Register new user
-POST /api/auth/login     # Login existing user
-```
-
-### User Management
-```http
-GET /api/users/{userId}  # Get user profile
-POST /api/users          # Update user profile
-```
-
-### Task Management
-```http
-GET /api/tasks          # List user's tasks
-POST /api/tasks         # Create new task
-PUT /api/tasks/{id}     # Update task
-DELETE /api/tasks/{id}  # Delete task
-```
-
-### File Management
-```http
-POST /api/upload        # Upload profile picture
-POST /delete-image      # Delete profile picture
-```
-
-For detailed API documentation including request/response schemas, visit the Swagger UI at `http://localhost:5000/api-docs` when the server is running.
-
----
-
-## 🤝 Contributing
-Contributions are welcome! Please feel free to submit a Pull Request.
-
----
-
-## 📄 License
-This project is licensed under the MIT License - see the LICENSE file for details.
